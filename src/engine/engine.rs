@@ -1,13 +1,12 @@
-use crate::engine::state::position::{Position, PositionStatus, PositionType};
-use chrono::{DateTime, NaiveWeek, Utc};
+use crate::engine::state::{
+    position::{Position, PositionStatus, PositionType},
+    trade::{CloseReason, Trade},
+};
+use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, VecDeque},
-    mem::Discriminant,
-    thread::sleep,
-};
+use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
 pub struct Engine {
@@ -23,6 +22,7 @@ pub struct Engine {
     pub max_leverage: Decimal,
     pub insurance_fund: Decimal,
     pub max_positions: usize,
+    pub trades: Vec<Trade>,
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EngineConfig {
@@ -46,6 +46,7 @@ impl Engine {
         Self {
             asset: config.asset,
             positions: HashMap::new(),
+            trades: Vec::new(),
             last_funding_time: Utc::now(),
             price_history: VecDeque::new(),
             mark_price: dec!(0),
@@ -59,7 +60,7 @@ impl Engine {
     }
 
     pub fn open_position(&mut self, open_position_data: OpenPositionData) -> Result<Uuid, String> {
-        self.validate_open_position(&open_position_data)?;
+        self.validate_open_position_data(&open_position_data)?;
 
         let id = Uuid::new_v4();
         let current_price = self.current_price;
@@ -120,9 +121,46 @@ impl Engine {
             position.pnl = pnl;
         }
 
+        let positions_to_liquate: Vec<Uuid> = self
+            .positions
+            .iter()
+            .filter(|(_id, position)| {
+                position.pnl + position.margin <= position.margin * self.maintenance_margin_rate
+            })
+            .map(|(id, _position)| *id)
+            .collect();
+
+        for id in positions_to_liquate {
+            self.liqudate_position(id).unwrap()
+        }
+
         Ok(())
     }
-    pub fn validate_open_position(&self, data: &OpenPositionData) -> Result<(), String> {
+
+    fn liqudate_position(&mut self, id: Uuid) -> Result<(), String> {
+        let position = self.positions.remove(&id).expect("Failed to liquate");
+
+        self.insurance_fund += (position.margin + position.pnl).max(dec!(0));
+
+        let trade = Trade {
+            asset: self.asset.clone(),
+            close_reason: CloseReason::Liquidated,
+            entry_price: position.entry_price,
+            exit_price: self.mark_price,
+            id: Uuid::new_v4(),
+            position_id: id,
+            settled_at: Utc::now(),
+            user_id: position.user_id,
+        };
+
+        self.trades.push(trade);
+        Ok(())
+    }
+
+    pub fn validate_open_position_data(&self, data: &OpenPositionData) -> Result<(), String> {
+        if self.positions.len() >= self.max_positions {
+            return Err("Market at max capacity".to_string());
+        }
         if data.asset != self.asset {
             return Err("Invalid asset".to_string());
         }
@@ -134,9 +172,6 @@ impl Engine {
         }
         if data.margin <= Decimal::ZERO {
             return Err("Margin must be > 0".to_string());
-        }
-        if self.positions.len() >= self.max_positions {
-            return Err("Market at max capacity".to_string());
         }
         Ok(())
     }

@@ -7,8 +7,6 @@ use uuid::Uuid;
 pub enum CloseReason {
     Manual,
     Liquidated,
-    TakeProfit,
-    StopLoss,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

@@ -1,4 +1,4 @@
-use futures_util::{StreamExt, stream};
+use futures_util::StreamExt;
 use serde_json::Value;
 use tokio_tungstenite::connect_async;
 
