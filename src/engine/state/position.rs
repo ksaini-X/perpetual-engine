@@ -3,12 +3,6 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub enum PositionType {
-    Long,
-    Short,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum PositionStatus {
     Open,
@@ -34,4 +28,19 @@ pub struct Position {
     pub pnl: Decimal,
 
     pub opened_at: DateTime<Utc>,
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+
+pub struct OpenPositionData {
+    pub user_id: Uuid,
+    pub asset: String,
+    pub side: PositionType,
+    pub quantity: Decimal,
+    pub leverage: Decimal,
+    pub margin: Decimal,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum PositionType {
+    Long,
+    Short,
 }

@@ -1,6 +1,9 @@
-use crate::engine::state::{
-    position::{Position, PositionStatus, PositionType},
-    trade::{CloseReason, Trade},
+use crate::engine::{
+    registry::EngineConfig,
+    state::{
+        position::{OpenPositionData, Position, PositionStatus, PositionType},
+        trade::{CloseReason, Trade},
+    },
 };
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
@@ -24,22 +27,7 @@ pub struct Engine {
     pub max_positions: usize,
     pub trades: Vec<Trade>,
 }
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct EngineConfig {
-    asset: String,
-    max_leverage: Decimal,
-    maintenance_margin_rate: Decimal,
-    max_positions: usize,
-}
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OpenPositionData {
-    user_id: Uuid,
-    asset: String,
-    side: PositionType,
-    quantity: Decimal,
-    leverage: Decimal,
-    margin: Decimal,
-}
+
 impl Engine {
     pub fn new(config: EngineConfig) -> Self {
         Self {
