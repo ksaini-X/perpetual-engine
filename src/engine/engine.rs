@@ -20,7 +20,7 @@ pub struct Engine {
     pub maintenance_margin_rate: Decimal,
     pub last_funding_time: DateTime<Utc>,
     pub max_leverage: Decimal,
-    pub insurance_fund: Decimal,
+    pub funds: Decimal,
     pub max_positions: usize,
     pub trades: Vec<Trade>,
 }
@@ -29,7 +29,6 @@ pub struct EngineConfig {
     asset: String,
     max_leverage: Decimal,
     maintenance_margin_rate: Decimal,
-    funding_rate: Decimal,
     max_positions: usize,
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -51,9 +50,9 @@ impl Engine {
             price_history: VecDeque::new(),
             mark_price: dec!(0),
             current_price: dec!(0),
-            insurance_fund: dec!(0),
+            funds: dec!(0),
             maintenance_margin_rate: config.maintenance_margin_rate,
-            funding_rate: config.funding_rate,
+            funding_rate: dec!(0),
             max_leverage: config.max_leverage,
             max_positions: config.max_positions,
         }
@@ -134,13 +133,19 @@ impl Engine {
             self.liqudate_position(id).unwrap()
         }
 
+        self.funding_rate = (self.current_price - self.mark_price) / self.mark_price;
+
+        if Utc::now().timestamp() - self.last_funding_time.timestamp() >= 8 * 60 * 60 {
+            self.apply_funding();
+        }
+
         Ok(())
     }
 
     fn liqudate_position(&mut self, id: Uuid) -> Result<(), String> {
         let position = self.positions.remove(&id).expect("Failed to liquate");
 
-        self.insurance_fund += (position.margin + position.pnl).max(dec!(0));
+        self.funds += (position.margin + position.pnl).max(dec!(0));
 
         let trade = Trade {
             asset: self.asset.clone(),
@@ -174,5 +179,48 @@ impl Engine {
             return Err("Margin must be > 0".to_string());
         }
         Ok(())
+    }
+
+    pub fn apply_funding(&mut self) {
+        let mut total_fund: Decimal = dec!(0);
+        let mut total_side_receipt: Decimal = dec!(0);
+
+        if self.funding_rate > dec!(0) {
+            for (_id, position) in self.positions.iter_mut() {
+                if position.side == PositionType::Long {
+                    let deduction = position.quantity * self.mark_price * self.funding_rate;
+                    position.margin -= deduction;
+                    total_fund += deduction;
+                } else {
+                    total_side_receipt += position.quantity * self.mark_price;
+                }
+            }
+        } else {
+            for (_id, position) in self.positions.iter_mut() {
+                if position.side == PositionType::Short {
+                    let deduction = position.quantity * self.mark_price * self.funding_rate;
+                    position.margin -= deduction;
+                    total_fund += deduction;
+                } else {
+                    total_side_receipt += position.quantity * self.mark_price;
+                }
+            }
+        }
+
+        if self.funding_rate > dec!(0) {
+            for (_id, position) in self.positions.iter_mut() {
+                if position.side == PositionType::Short {
+                    position.margin +=
+                        ((position.quantity * self.mark_price) / total_side_receipt) * total_fund;
+                }
+            }
+        } else {
+            for (_id, position) in self.positions.iter_mut() {
+                if position.side == PositionType::Long {
+                    position.margin +=
+                        ((position.quantity * self.mark_price) / total_side_receipt) * total_fund;
+                }
+            }
+        }
     }
 }
