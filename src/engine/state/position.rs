@@ -12,13 +12,12 @@ pub enum PositionType {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum PositionStatus {
     Open,
-    Closed,     // user closed manually
-    Liquidated, // force closed
+    Closed,
+    Liquidated,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Position {
-    pub id: Uuid,
     pub user_id: Uuid,
     pub asset: String,
     pub side: PositionType,
@@ -35,5 +34,4 @@ pub struct Position {
     pub pnl: Decimal,
 
     pub opened_at: DateTime<Utc>,
-    pub closed_at: DateTime<Utc>,
 }
