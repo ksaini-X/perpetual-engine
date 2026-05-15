@@ -3,12 +3,10 @@ use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::engine;
 use crate::engine::engine::Engine;
 use crate::engine::state::position::OpenPositionData;
 use crate::engine::state::{trade::Trade, user::User};
 use std::collections::HashMap;
-use std::thread::ThreadId;
 
 pub struct Registry {
     pub enignes: HashMap<String, Engine>,
@@ -23,7 +21,6 @@ pub struct EngineConfig {
     pub maintenance_margin_rate: Decimal,
     pub max_positions: usize,
 }
-
 impl Registry {
     pub fn new() -> Self {
         Self {
@@ -59,24 +56,28 @@ impl Registry {
         if user.balance <= margin {
             return Err("Insufficeint balance".to_string());
         }
-
+        let user = self.users.get_mut(&user_id).unwrap();
+        user.balance -= margin;
+        user.locked_margin += margin;
+        user.available_balance -= margin;
         Ok(())
     }
 
-    pub fn get_or_add_user(&mut self, user_id: Option<Uuid>) -> Result<&User, String> {
-        match user_id {
-            Some(id) => Ok(self.users.get(&id).ok_or("Invalid User ID")?),
-            None => {
-                let id = Uuid::new_v4();
-                let user = User {
-                    id,
-                    available_balance: dec!(10_000_000),
-                    balance: dec!(10_000_000),
-                    locked_margin: dec!(0),
-                };
-                self.users.insert(id, user);
-                Ok(&self.users.get(&id).unwrap())
-            }
-        }
+    pub fn add_user(&mut self) -> Result<&User, String> {
+        let id = Uuid::new_v4();
+        let user = User {
+            id,
+            available_balance: dec!(10_000_000),
+            balance: dec!(10_000_000),
+            locked_margin: dec!(0),
+        };
+        self.users.insert(id, user);
+        Ok(&self.users.get(&id).unwrap())
+    }
+
+    pub fn get_user(&mut self, user_id: Uuid) -> Result<&User, String> {
+        self.users
+            .get(&user_id)
+            .ok_or("Invalid User ID".to_string())
     }
 }
