@@ -44,8 +44,13 @@ impl Registry {
         engine.update_price(new_price)
     }
 
-    pub fn open_position(&mut self, open_position_data: OpenPositionData) -> Result<(), String> {
-        self.validate_user_balance(open_position_data.margin, &open_position_data.user_id)
+    pub fn open_position(&mut self, open_position_data: OpenPositionData) -> Result<Uuid, String> {
+        self.validate_user_balance(open_position_data.margin, &open_position_data.user_id)?;
+        let engine = self.enignes.get_mut(&open_position_data.asset);
+        match engine {
+            Some(engine) => engine.open_position(open_position_data),
+            None => Err("Asset engine not found".to_string()),
+        }
     }
 
     fn validate_user_balance(&mut self, margin: Decimal, user_id: &Uuid) -> Result<(), String> {
